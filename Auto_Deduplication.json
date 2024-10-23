@@ -1,0 +1,280 @@
+{
+  "name": "Auto Deduplication",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "ddb3da77-6127-41fd-b6b4-5a1ff48ace32",
+              "leftValue": "={{ $json.total }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "f8d52a9f-9be0-4778-8d1f-a6ec75d3317d",
+      "name": "Check Results",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        540,
+        320
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "992ac7a6-8045-47f1-a4ea-0a4185da7b17",
+      "name": "When clicking \"Test workflow\"",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1166e0f-763e-4145-b220-9d5d39a653e8",
+              "name": "domain",
+              "value": "lockwoodexecutivesearch.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d501b67b-3eca-4698-89b1-c95b6f0a6142",
+      "name": "Set Domain",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        140,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/companies/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer HubSpot_Token"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"filterGroups\": [\n    {\n      \"filters\": [\n        {\n          \"propertyName\": \"lifecyclestage\",\n          \"operator\": \"IN\",\n          \"values\": [\"subscriber\", \"114184284\", \"marketingqualifiedlead\", \"salesqualifiedlead\", \"lead\"]\n        },\n        {\n          \"propertyName\": \"domain\",\n          \"operator\": \"EQ\",\n          \"value\": \"{{ $json.domain }}\"\n        }\n      ]\n    }\n  ],\n  \"properties\": [\"notes_last_updated\", \"createdate\"],\n  \"limit\": 100\n}",
+        "options": {}
+      },
+      "id": "0ff293b9-8fec-484e-b858-95f4db19169a",
+      "name": "Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        340,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ab5b9334-1156-4c95-bf22-5756bdd855c8",
+              "name": "r1_id",
+              "value": "={{ $json.results[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "59b74c66-4614-42de-8faf-63972e7b0b03",
+              "name": "r1_cd",
+              "value": "={{ $json.results[0].properties.createdate }}",
+              "type": "string"
+            },
+            {
+              "id": "f653d564-97f0-4d8d-a108-56419dd8c3f5",
+              "name": "r1_nlud",
+              "value": "={{ $json.results[0].properties.notes_last_updated }}",
+              "type": "string"
+            },
+            {
+              "id": "c11745da-b1cd-46fd-a9b0-4149b0297c06",
+              "name": "r2_id",
+              "value": "={{ $json.results[1].id }}",
+              "type": "string"
+            },
+            {
+              "id": "eaa442fa-9b80-49ac-8e73-9c4bce41a77e",
+              "name": "r2_cd",
+              "value": "={{ $json.results[1].properties.createdate }}",
+              "type": "string"
+            },
+            {
+              "id": "bff22c32-db42-4a10-b7f7-556c615af74f",
+              "name": "r2_nlud",
+              "value": "={{ $json.results[1].properties.notes_last_updated }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "47ca27d9-baef-420e-9cef-597a5a326093",
+      "name": "Set Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst result = items.map((item) => {\n  const r1_nlud = item.json.r1_nlud;\n  const r2_nlud = item.json.r2_nlud;\n  const r1_cd = item.json.r1_cd;\n  const r2_cd = item.json.r2_cd;\n  const r1_id = item.json.r1_id;\n  const r2_id = item.json.r2_id;\n\n  let pid, sid;\n\n  if (r1_nlud && !r2_nlud) {\n    pid = r1_id;\n    sid = r2_id;\n  } else if (r2_nlud && !r1_nlud) {\n    pid = r2_id;\n    sid = r1_id;\n  } else if (r1_nlud && r2_nlud) {\n    if (new Date(r1_nlud) > new Date(r2_nlud)) {\n      pid = r1_id;\n      sid = r2_id;\n    } else {\n      pid = r2_id;\n      sid = r1_id;\n    }\n  } else {\n    if (new Date(r1_cd) > new Date(r2_cd)) {\n      pid = r1_id;\n      sid = r2_id;\n    } else {\n      pid = r2_id;\n      sid = r1_id;\n    }\n  }\n\n  return { pid, sid };\n});\n\nreturn result;\n"
+      },
+      "id": "412ff0aa-8272-4507-867e-b4695e779388",
+      "name": "Examine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/companies/merge",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer HubSpot_Token"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"primaryObjectId\": {{ $json.pid }},\n  \"objectIdToMerge\": {{ $json.sid }}\n}",
+        "options": {}
+      },
+      "id": "531dcaf1-668b-4c9f-904c-1e5df78df46e",
+      "name": "Merge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking \"Test workflow\"": {
+      "main": [
+        [
+          {
+            "node": "Set Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Domain": {
+      "main": [
+        [
+          {
+            "node": "Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search": {
+      "main": [
+        [
+          {
+            "node": "Check Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Data": {
+      "main": [
+        [
+          {
+            "node": "Examine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Results": {
+      "main": [
+        [
+          {
+            "node": "Set Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Examine": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "917850bc-9f52-41bb-aaa2-ff4c925696f5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "47efb329a2ed99679b35002ee1d3d7dc07f77bda3571d2590fba066438a994f5"
+  },
+  "id": "hnFwAXC9Crbom0Sz",
+  "tags": []
+}
